@@ -5,19 +5,21 @@ from gtts import gTTS
 import pygame
 import os
 from musicLib import music
+from google import genai
+from google.genai import types
 from dotenv import load_dotenv
 
-# Load environment variables
+
 load_dotenv()
 
-# Initialize engines once at the top
+
 r = sr.Recognizer()
 
 pygame.init()
 pygame.mixer.init()
 
 def speak(text):
-    # Generate the audio
+    
     tts = gTTS(text=text, lang='en', tld='co.uk')
     filename = "response.mp3"
     tts.save(filename)
@@ -26,14 +28,37 @@ def speak(text):
     pygame.mixer.music.load(filename)
     pygame.mixer.music.play()
     
-    # Wait for the audio to finish playing
+   
     while pygame.mixer.music.get_busy():
         pygame.time.Clock().tick(10)
         
-    # Clean up the file so it doesn't clutter your folder
+    # Clean up the file
     pygame.mixer.music.unload()
     os.remove(filename)
+    
+    
 
+client=genai.Client(api_key=os.getenv('GEMINI_API_KEY').strip())
+
+# Function to generate response using Gemini API
+def generate_response(prompt):
+    try:
+        assistant_config=types.GenerateContentConfig(
+        system_instruction="You are ARGUS, a smart and helpful AI voice assistant. Always keep your answers extremely brief, conversational, and under 4 sentences.",
+        temperature=0.7,
+        max_output_tokens=200
+        )
+        response = client.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=prompt,
+            config=assistant_config
+        )
+        return response.text
+    except Exception as e:
+        print(f"Error generating response: {e}")
+        return "Sorry, I couldn't generate a response at this time."
+
+# Function to process commands
 def processCommand(command):
     if "open youtube" in command.lower():
         speak("Opening YouTube.")
@@ -54,13 +79,12 @@ def processCommand(command):
         webbrowser.open(link)
     elif "news" in command.lower():
         api_key = os.getenv('NEWS_API_KEY').strip()
-        print(f"MY KEY IS: {api_key}")
+        
         data=requests.get(f"https://newsapi.org/v2/everything?q=India&language=en&apiKey={api_key}")
-        print(f"Response Status Code: {data.status_code}")
+       
         
         if data.status_code==200:
             articles=data.json().get("articles", [])
-            print(f"Number of articles received: {len(articles)}")
             
             for article in articles[:5]:  # Read top 5 headlines
                 print(article['title'])
@@ -69,7 +93,9 @@ def processCommand(command):
             print(f"Error Response -> {data.text}")
             speak("I am getting an error from the news server.")
     else:
-        speak("Sorry, I didn't understand that command.")
+        response=generate_response(command)
+        print(f"ARGUS: {response}")
+        speak(response)
     
 if __name__ == "__main__":
     speak("Initializing ARGUS.....")
@@ -78,7 +104,7 @@ if __name__ == "__main__":
         print("\nSay 'ARGUS' to activate the assistant.")
         try:
             with sr.Microphone() as source:
-                # 1. Calibrate for background noise (Crucial for accuracy)
+                # Calibrate for background noise (Crucial for accuracy)
                 r.adjust_for_ambient_noise(source, duration=0.5)
                 print("Listening...")
                 
